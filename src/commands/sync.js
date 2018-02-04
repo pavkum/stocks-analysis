@@ -8,63 +8,42 @@ const CONSTANTS = require("../utils/constants");
 const Stocks = require("../fetch/stocks");
 const Logger = require("../utils/logger");
 
-const watchlist = config.watchlist;
-Logger.info("Initiating sync: ", watchlist);
+module.exports = {
+  execute: function(collection, args) {
+    const watchlist = config.watchlist;
 
-const connectionPromise = Connection.connect();
+    Logger.info("Initiating sync: ", watchlist);
 
-const collectionPromise = connectionPromise.then(function (client) {
-  return Collection.getCollection(client);
-}).catch(function (error) {
-  Logger.fatal("Error establishing mongo connection", error);
-  return null;
-});
+    const datePromises = _.map(watchlist, function (symbol) {
+      return Collection.getLastInsertedDate(collection, symbol)
+    });
 
-const datePromises = collectionPromise.then(function (collection) {
-  return _.map(watchlist, function (symbol) {
-    return Collection.getLastInsertedDate(collection, symbol)
-  });
-}).catch(function (error) {
- connectionPromise.then(function(connection) {
-   Connection.close(connection);
+    return Promise.map(datePromises, function (obj, index) {
+      const symbol = watchlist[index];
+      const to = moment().format(CONSTANTS.YFINANCE_DATE_FORMAT);
 
-   Logger.fatal("An error occurred while obtaining collection", error)
-  }); 
-})
+      let from;
+      if (obj) {
+        from = moment(obj.date).add(1, "days")
+          .format(CONSTANTS.YFINANCE_DATE_FORMAT);
+      } else {
+        from = moment().subtract(CONSTANTS.HISTORICAL_LENGTH, "days")
+          .format(CONSTANTS.YFINANCE_DATE_FORMAT);
+      }
+      
+      Logger.debug("Last fetched snapshot for: ", symbol, obj);
 
-Promise.map(datePromises, function (obj, index) {
-  const symbol = watchlist[index];
-  const to = moment().format(CONSTANTS.YFINANCE_DATE_FORMAT);
-
-  let from;
-  if (obj) {
-    from = moment(obj.date).add(1, "days")
-      .format(CONSTANTS.YFINANCE_DATE_FORMAT);
-  } else {
-    from = moment().subtract(CONSTANTS.HISTORICAL_LENGTH, "days")
-      .format(CONSTANTS.YFINANCE_DATE_FORMAT);
+      return Stocks.historical(symbol, from, to);
+    }).map(function (array) {
+      // already resolved
+      return Collection.insert(collection, array);
+    }).then(function () {
+      Logger.info("Sync successfully completed for: ", watchlist);
+      return true;
+    }).catch(function (error) {
+      Logger.error("An error occured while syncing", error);
+      return false;
+    });
   }
- 
-  Logger.debug("Last fetched snapshot for: ", symbol, obj);
+};
 
-  return Stocks.historical(symbol, from, to);
-}).map(function (array) {
-  // already resolved
-  return collectionPromise.then(function (collection) {
-    return Collection.insert(collection, array);
-  });
-}).then(function () {
-  // close connection
-  connectionPromise.then(function(connection) {
-    Connection.close(connection);
-
-    Logger.info("Sync successfully completed for: ", watchlist);
-  });
-}).catch(function (error) {
-  // close connection
-  connectionPromise.then(function(connection) {
-    Connection.close(connection);
-
-    Logger.error("An error occured while syncing", error);
-  });
-})
