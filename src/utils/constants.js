@@ -1,0 +1,4 @@
+module.exports = {
+  YFINANCE_DATE_FORMAT: "YYYY-MM-DD",
+  HISTORICAL_LENGTH: 365
+};

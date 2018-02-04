@@ -11,7 +11,10 @@
   "dependencies": {
     "colors": "^1.1.2",
     "fs-extra": "^5.0.0",
+    "logger": "0.0.1",
     "moment": "^2.20.1",
+    "mongodb": "^3.0.2",
+    "talib": "^1.0.4",
     "underscore-node": "^0.1.2",
     "utils": "^0.3.1",
     "yahoo-finance": "^0.3.5"
